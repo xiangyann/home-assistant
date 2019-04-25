@@ -14,13 +14,16 @@
                 "data": {
                     "2fa": "PIN"
                 },
+                "description": "Pusty",
                 "title": "Uwierzytelnianie dwusk\u0142adnikowe"
             },
             "user": {
                 "data": {
+                    "authorization_code": "Kod autoryzacji (wymagany do r\u0119cznego uwierzytelnienia)",
                     "email": "Adres e-mail",
                     "password": "Has\u0142o"
                 },
+                "description": "Pusty",
                 "title": "Logowanie do Google Hangouts"
             }
         },
