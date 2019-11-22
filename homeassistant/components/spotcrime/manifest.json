@@ -1,9 +1,9 @@
 {
   "domain": "spotcrime",
   "name": "Spotcrime",
-  "documentation": "https://www.home-assistant.io/components/spotcrime",
+  "documentation": "https://www.home-assistant.io/integrations/spotcrime",
   "requirements": [
-    "spotcrime==1.0.3"
+    "spotcrime==1.0.4"
   ],
   "dependencies": [],
   "codeowners": []

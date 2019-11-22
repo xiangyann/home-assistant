@@ -1,9 +1,9 @@
 {
   "domain": "dnsip",
   "name": "Dnsip",
-  "documentation": "https://www.home-assistant.io/components/dnsip",
+  "documentation": "https://www.home-assistant.io/integrations/dnsip",
   "requirements": [
-    "aiodns==1.1.1"
+    "aiodns==2.0.0"
   ],
   "dependencies": [],
   "codeowners": []
