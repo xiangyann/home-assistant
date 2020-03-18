@@ -1,27 +1,30 @@
 """Viessmann ViCare climate device."""
+from datetime import timedelta
 import logging
+
 import requests
-import simplejson
 
 from homeassistant.components.climate import ClimateDevice
 from homeassistant.components.climate.const import (
-    SUPPORT_PRESET_MODE,
-    SUPPORT_TARGET_TEMPERATURE,
-    PRESET_ECO,
-    PRESET_COMFORT,
-    HVAC_MODE_OFF,
-    HVAC_MODE_HEAT,
-    HVAC_MODE_AUTO,
     CURRENT_HVAC_HEAT,
     CURRENT_HVAC_IDLE,
+    HVAC_MODE_AUTO,
+    HVAC_MODE_HEAT,
+    HVAC_MODE_OFF,
+    PRESET_COMFORT,
+    PRESET_ECO,
+    SUPPORT_PRESET_MODE,
+    SUPPORT_TARGET_TEMPERATURE,
 )
-from homeassistant.const import TEMP_CELSIUS, ATTR_TEMPERATURE, PRECISION_WHOLE
+from homeassistant.const import ATTR_TEMPERATURE, PRECISION_WHOLE, TEMP_CELSIUS
 
-from . import DOMAIN as VICARE_DOMAIN
-from . import VICARE_API
-from . import VICARE_NAME
-from . import VICARE_HEATING_TYPE
-from . import HeatingType
+from . import (
+    DOMAIN as VICARE_DOMAIN,
+    VICARE_API,
+    VICARE_HEATING_TYPE,
+    VICARE_NAME,
+    HeatingType,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -76,6 +79,9 @@ HA_TO_VICARE_PRESET_HEATING = {
 }
 
 PYVICARE_ERROR = "error"
+
+# Scan interval of 15 minutes seems to be safe to not hit the ViCare server rate limit
+SCAN_INTERVAL = timedelta(seconds=900)
 
 
 def setup_platform(hass, config, add_entities, discovery_info=None):
@@ -169,7 +175,7 @@ class ViCareClimate(ClimateDevice):
                 ] = self._api.getReturnTemperature()
         except requests.exceptions.ConnectionError:
             _LOGGER.error("Unable to retrieve data from ViCare server")
-        except simplejson.errors.JSONDecodeError:
+        except ValueError:
             _LOGGER.error("Unable to decode data from ViCare server")
 
     @property

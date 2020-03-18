@@ -35,6 +35,11 @@ CONF_PREFIX = "prefix"
 
 _LOGGER = logging.getLogger(__name__)
 
+SERVICE_ALARM_DISPLAY_MESSAGE = "alarm_display_message"
+SERVICE_ALARM_ARM_VACATION = "alarm_arm_vacation"
+SERVICE_ALARM_ARM_HOME_INSTANT = "alarm_arm_home_instant"
+SERVICE_ALARM_ARM_NIGHT_INSTANT = "alarm_arm_night_instant"
+
 SUPPORTED_DOMAINS = [
     "alarm_control_panel",
     "climate",
@@ -252,9 +257,7 @@ class ElkEntity(Entity):
             uid_start = f"elkm1m_{self._prefix}"
         else:
             uid_start = "elkm1"
-        self._unique_id = "{uid_start}_{name}".format(
-            uid_start=uid_start, name=self._element.default_name("_")
-        ).lower()
+        self._unique_id = f"{uid_start}_{self._element.default_name('_')}".lower()
 
     @property
     def name(self):

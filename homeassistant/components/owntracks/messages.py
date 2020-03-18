@@ -2,15 +2,14 @@
 import json
 import logging
 
-from nacl.secret import SecretBox
 from nacl.encoding import Base64Encoder
+from nacl.secret import SecretBox
 
 from homeassistant.components import zone as zone_comp
 from homeassistant.components.device_tracker import (
-    SOURCE_TYPE_GPS,
     SOURCE_TYPE_BLUETOOTH_LE,
+    SOURCE_TYPE_GPS,
 )
-
 from homeassistant.const import STATE_HOME
 from homeassistant.util import decorator, slugify
 
@@ -145,6 +144,37 @@ def _decrypt_payload(secret, topic, ciphertext):
         return None
 
 
+def encrypt_message(secret, topic, message):
+    """Encrypt message."""
+
+    keylen = SecretBox.KEY_SIZE
+
+    if isinstance(secret, dict):
+        key = secret.get(topic)
+    else:
+        key = secret
+
+    if key is None:
+        _LOGGER.warning(
+            "Unable to encrypt payload because no decryption key known " "for topic %s",
+            topic,
+        )
+        return None
+
+    key = key.encode("utf-8")
+    key = key[:keylen]
+    key = key.ljust(keylen, b"\0")
+
+    try:
+        message = message.encode("utf-8")
+        payload = SecretBox(key).encrypt(message, encoder=Base64Encoder)
+        _LOGGER.debug("Encrypted message: %s to %s", message, payload)
+        return payload.decode("utf-8")
+    except ValueError:
+        _LOGGER.warning("Unable to encrypt message for topic %s", topic)
+        return None
+
+
 @HANDLERS.register("location")
 async def async_handle_location_message(hass, context, message):
     """Handle a location message."""
@@ -272,8 +302,17 @@ async def async_handle_waypoint(hass, name_base, waypoint):
         return
 
     zone = zone_comp.Zone(
-        hass, pretty_name, lat, lon, rad, zone_comp.ICON_IMPORT, False
+        {
+            zone_comp.CONF_NAME: pretty_name,
+            zone_comp.CONF_LATITUDE: lat,
+            zone_comp.CONF_LONGITUDE: lon,
+            zone_comp.CONF_RADIUS: rad,
+            zone_comp.CONF_ICON: zone_comp.ICON_IMPORT,
+            zone_comp.CONF_PASSIVE: False,
+        },
+        False,
     )
+    zone.hass = hass
     zone.entity_id = entity_id
     await zone.async_update_ha_state()
 
