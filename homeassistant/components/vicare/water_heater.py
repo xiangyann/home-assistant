@@ -1,12 +1,11 @@
 """Viessmann ViCare water_heater device."""
-from datetime import timedelta
 import logging
 
 import requests
 
 from homeassistant.components.water_heater import (
     SUPPORT_TARGET_TEMPERATURE,
-    WaterHeaterDevice,
+    WaterHeaterEntity,
 )
 from homeassistant.const import ATTR_TEMPERATURE, PRECISION_WHOLE, TEMP_CELSIUS
 
@@ -43,9 +42,6 @@ HA_TO_VICARE_HVAC_DHW = {
 
 PYVICARE_ERROR = "error"
 
-# Scan interval of 15 minutes seems to be safe to not hit the ViCare server rate limit
-SCAN_INTERVAL = timedelta(seconds=900)
-
 
 def setup_platform(hass, config, add_entities, discovery_info=None):
     """Create the ViCare water_heater devices."""
@@ -64,7 +60,7 @@ def setup_platform(hass, config, add_entities, discovery_info=None):
     )
 
 
-class ViCareWater(WaterHeaterDevice):
+class ViCareWater(WaterHeaterEntity):
     """Representation of the ViCare domestic hot water device."""
 
     def __init__(self, name, api, heating_type):

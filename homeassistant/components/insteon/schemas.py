@@ -11,7 +11,6 @@ from homeassistant.const import (
     CONF_PLATFORM,
     CONF_PORT,
     ENTITY_MATCH_ALL,
-    ENTITY_MATCH_NONE,
 )
 import homeassistant.helpers.config_validation as cv
 
@@ -52,15 +51,11 @@ def set_default_port(schema: Dict) -> Dict:
     if not ip_port:
         hub_version = schema.get(CONF_HUB_VERSION)
         # Found hub_version but not ip_port
-        if hub_version == 1:
-            schema[CONF_IP_PORT] = 9761
-        else:
-            schema[CONF_IP_PORT] = 25105
+        schema[CONF_IP_PORT] = 9761 if hub_version == 1 else 25105
     return schema
 
 
 CONF_DEVICE_OVERRIDE_SCHEMA = vol.All(
-    cv.deprecated(CONF_PLATFORM),
     vol.Schema(
         {
             vol.Required(CONF_ADDRESS): cv.string,
@@ -89,6 +84,9 @@ CONF_X10_SCHEMA = vol.All(
 CONFIG_SCHEMA = vol.Schema(
     {
         DOMAIN: vol.All(
+            cv.deprecated(CONF_X10_ALL_UNITS_OFF),
+            cv.deprecated(CONF_X10_ALL_LIGHTS_ON),
+            cv.deprecated(CONF_X10_ALL_LIGHTS_OFF),
             vol.Schema(
                 {
                     vol.Exclusive(
@@ -104,9 +102,6 @@ CONFIG_SCHEMA = vol.Schema(
                     vol.Optional(CONF_OVERRIDE): vol.All(
                         cv.ensure_list_csv, [CONF_DEVICE_OVERRIDE_SCHEMA]
                     ),
-                    vol.Optional(CONF_X10_ALL_UNITS_OFF): vol.In(HOUSECODES),
-                    vol.Optional(CONF_X10_ALL_LIGHTS_ON): vol.In(HOUSECODES),
-                    vol.Optional(CONF_X10_ALL_LIGHTS_OFF): vol.In(HOUSECODES),
                     vol.Optional(CONF_X10): vol.All(
                         cv.ensure_list_csv, [CONF_X10_SCHEMA]
                     ),
@@ -137,9 +132,7 @@ DEL_ALL_LINK_SCHEMA = vol.Schema(
 
 LOAD_ALDB_SCHEMA = vol.Schema(
     {
-        vol.Required(CONF_ENTITY_ID): vol.Any(
-            cv.entity_id, ENTITY_MATCH_ALL, ENTITY_MATCH_NONE
-        ),
+        vol.Required(CONF_ENTITY_ID): vol.Any(cv.entity_id, ENTITY_MATCH_ALL),
         vol.Optional(SRV_LOAD_DB_RELOAD, default=False): cv.boolean,
     }
 )

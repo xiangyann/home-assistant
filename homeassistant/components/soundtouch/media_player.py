@@ -3,15 +3,17 @@ import logging
 import re
 
 from libsoundtouch import soundtouch_device
+from libsoundtouch.utils import Source
 import voluptuous as vol
 
-from homeassistant.components.media_player import PLATFORM_SCHEMA, MediaPlayerDevice
+from homeassistant.components.media_player import PLATFORM_SCHEMA, MediaPlayerEntity
 from homeassistant.components.media_player.const import (
     SUPPORT_NEXT_TRACK,
     SUPPORT_PAUSE,
     SUPPORT_PLAY,
     SUPPORT_PLAY_MEDIA,
     SUPPORT_PREVIOUS_TRACK,
+    SUPPORT_SELECT_SOURCE,
     SUPPORT_TURN_OFF,
     SUPPORT_TURN_ON,
     SUPPORT_VOLUME_MUTE,
@@ -80,6 +82,7 @@ SUPPORT_SOUNDTOUCH = (
     | SUPPORT_TURN_ON
     | SUPPORT_PLAY
     | SUPPORT_PLAY_MEDIA
+    | SUPPORT_SELECT_SOURCE
 )
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
@@ -184,7 +187,7 @@ def setup_platform(hass, config, add_entities, discovery_info=None):
     )
 
 
-class SoundTouchDevice(MediaPlayerDevice):
+class SoundTouchDevice(MediaPlayerEntity):
     """Representation of a SoundTouch Bose device."""
 
     def __init__(self, name, config):
@@ -233,6 +236,19 @@ class SoundTouchDevice(MediaPlayerDevice):
             return STATE_OFF
 
         return MAP_STATUS.get(self._status.play_status, STATE_UNAVAILABLE)
+
+    @property
+    def source(self):
+        """Name of the current input source."""
+        return self._status.source
+
+    @property
+    def source_list(self):
+        """List of available input sources."""
+        return [
+            Source.AUX.value,
+            Source.BLUETOOTH.value,
+        ]
 
     @property
     def is_volume_muted(self):
@@ -357,6 +373,17 @@ class SoundTouchDevice(MediaPlayerDevice):
             else:
                 _LOGGER.warning("Unable to find preset with id %s", media_id)
 
+    def select_source(self, source):
+        """Select input source."""
+        if source == Source.AUX.value:
+            _LOGGER.debug("Selecting source AUX")
+            self._device.select_source_aux()
+        elif source == Source.BLUETOOTH.value:
+            _LOGGER.debug("Selecting source Bluetooth")
+            self._device.select_source_bluetooth()
+        else:
+            _LOGGER.warning("Source %s is not supported", source)
+
     def create_zone(self, slaves):
         """
         Create a zone (multi-room)  and play on selected devices.
@@ -437,20 +464,37 @@ class SoundTouchDevice(MediaPlayerDevice):
         # slaves for some reason. To compensate for this shortcoming we have to fetch
         # the zone info from the master when the current device is a slave until this is
         # fixed in the SoundTouch API or libsoundtouch, or of course until somebody has a
-        # better idea on how to fix this
-        if zone_status.is_master:
+        # better idea on how to fix this.
+        # In addition to this shortcoming, libsoundtouch seems to report the "is_master"
+        # property wrong on some slaves, so the only reliable way to detect if the current
+        # devices is the master, is by comparing the master_id of the zone with the device_id
+        if zone_status.master_id == self._device.config.device_id:
             return self._build_zone_info(self.entity_id, zone_status.slaves)
 
-        master_instance = self._get_instance_by_ip(zone_status.master_ip)
-        master_zone_status = master_instance.device.zone_status()
-        return self._build_zone_info(
-            master_instance.entity_id, master_zone_status.slaves
-        )
+        # The master device has to be searched by it's ID and not IP since libsoundtouch / BOSE API
+        # do not return the IP of the master for some slave objects/responses
+        master_instance = self._get_instance_by_id(zone_status.master_id)
+        if master_instance is not None:
+            master_zone_status = master_instance.device.zone_status()
+            return self._build_zone_info(
+                master_instance.entity_id, master_zone_status.slaves
+            )
+
+        # We should never end up here since this means we haven't found a master device to get the
+        # correct zone info from. In this case, assume current device is master
+        return self._build_zone_info(self.entity_id, zone_status.slaves)
 
     def _get_instance_by_ip(self, ip_address):
         """Search and return a SoundTouchDevice instance by it's IP address."""
         for instance in self.hass.data[DATA_SOUNDTOUCH]:
             if instance and instance.config["host"] == ip_address:
+                return instance
+        return None
+
+    def _get_instance_by_id(self, instance_id):
+        """Search and return a SoundTouchDevice instance by it's ID (aka MAC address)."""
+        for instance in self.hass.data[DATA_SOUNDTOUCH]:
+            if instance and instance.device.config.device_id == instance_id:
                 return instance
         return None
 

@@ -19,7 +19,12 @@ import homeassistant.components.http as http
 import homeassistant.components.withings.const as const
 from homeassistant.config import async_process_ha_core_config
 from homeassistant.config_entries import SOURCE_USER
-from homeassistant.const import CONF_UNIT_SYSTEM, CONF_UNIT_SYSTEM_METRIC
+from homeassistant.const import (
+    CONF_CLIENT_ID,
+    CONF_CLIENT_SECRET,
+    CONF_UNIT_SYSTEM,
+    CONF_UNIT_SYSTEM_METRIC,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_entry_oauth2_flow
 from homeassistant.setup import async_setup_component
@@ -55,9 +60,9 @@ async def setup_hass(hass: HomeAssistant) -> dict:
         api.DOMAIN: {"base_url": "http://localhost/"},
         http.DOMAIN: {"server_port": 8080},
         const.DOMAIN: {
-            const.CLIENT_ID: "my_client_id",
-            const.CLIENT_SECRET: "my_client_secret",
-            const.PROFILES: profiles,
+            CONF_CLIENT_ID: "my_client_id",
+            CONF_CLIENT_SECRET: "my_client_secret",
+            const.CONF_PROFILES: profiles,
         },
     }
 
@@ -86,27 +91,27 @@ async def configure_integration(
 
     with requests_mock.mock() as rqmck:
         rqmck.get(
-            re.compile(AbstractWithingsApi.URL + "/v2/user?.*action=getdevice(&.*|$)"),
+            re.compile(f"{AbstractWithingsApi.URL}/v2/user?.*action=getdevice(&.*|$)"),
             status_code=200,
             json=get_device_response,
         )
 
         rqmck.get(
-            re.compile(AbstractWithingsApi.URL + "/v2/sleep?.*action=get(&.*|$)"),
+            re.compile(f"{AbstractWithingsApi.URL}/v2/sleep?.*action=get(&.*|$)"),
             status_code=200,
             json=get_sleep_response,
         )
 
         rqmck.get(
             re.compile(
-                AbstractWithingsApi.URL + "/v2/sleep?.*action=getsummary(&.*|$)"
+                f"{AbstractWithingsApi.URL}/v2/sleep?.*action=getsummary(&.*|$)"
             ),
             status_code=200,
             json=get_sleep_summary_response,
         )
 
         rqmck.get(
-            re.compile(AbstractWithingsApi.URL + "/measure?.*action=getmeas(&.*|$)"),
+            re.compile(f"{AbstractWithingsApi.URL}/measure?.*action=getmeas(&.*|$)"),
             status_code=200,
             json=getmeasures_response,
         )
@@ -124,7 +129,7 @@ async def configure_integration(
         assert result["url"] == (
             "https://account.withings.com/oauth2_user/authorize2?"
             "response_type=code&client_id=my_client_id&"
-            "redirect_uri=http://127.0.0.1:8080/auth/external/callback&"
+            "redirect_uri=http://example.local/auth/external/callback&"
             f"state={state}"
             "&scope=user.info,user.metrics,user.activity"
         )

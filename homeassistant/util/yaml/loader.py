@@ -88,9 +88,6 @@ def _add_reference(
     ...
 
 
-# pylint: enable=pointless-statement
-
-
 def _add_reference(  # type: ignore
     obj, loader: SafeLineLoader, node: yaml.nodes.Node
 ):
@@ -295,7 +292,7 @@ def secret_yaml(loader: SafeLineLoader, node: yaml.nodes.Node) -> JSON_TYPE:
             _LOGGER.debug("Secret %s retrieved from keyring", node.value)
             return pwd
 
-    global credstash  # pylint: disable=invalid-name
+    global credstash  # pylint: disable=invalid-name, global-statement
 
     if credstash:
         # pylint: disable=no-member

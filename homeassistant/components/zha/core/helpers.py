@@ -1,10 +1,22 @@
-"""Helpers for Zigbee Home Automation."""
-import collections
-import logging
+"""
+Helpers for Zigbee Home Automation.
 
+For more details about this component, please refer to the documentation at
+https://home-assistant.io/integrations/zha/
+"""
+
+import asyncio
+import collections
+import functools
+import itertools
+import logging
+from random import uniform
+from typing import Any, Callable, Iterator, List, Optional
+
+import zigpy.exceptions
 import zigpy.types
 
-from homeassistant.core import callback
+from homeassistant.core import State, callback
 
 from .const import CLUSTER_TYPE_IN, CLUSTER_TYPE_OUT, DATA_ZHA, DATA_ZHA_GATEWAY
 from .registries import BINDABLE_CLUSTERS
@@ -85,6 +97,45 @@ async def async_get_zha_device(hass, device_id):
     return zha_gateway.devices[ieee]
 
 
+def find_state_attributes(states: List[State], key: str) -> Iterator[Any]:
+    """Find attributes with matching key from states."""
+    for state in states:
+        value = state.attributes.get(key)
+        if value is not None:
+            yield value
+
+
+def mean_int(*args):
+    """Return the mean of the supplied values."""
+    return int(sum(args) / len(args))
+
+
+def mean_tuple(*args):
+    """Return the mean values along the columns of the supplied values."""
+    return tuple(sum(x) / len(x) for x in zip(*args))
+
+
+def reduce_attribute(
+    states: List[State],
+    key: str,
+    default: Optional[Any] = None,
+    reduce: Callable[..., Any] = mean_int,
+) -> Any:
+    """Find the first attribute matching key from states.
+
+    If none are found, return default.
+    """
+    attrs = list(find_state_attributes(states, key))
+
+    if not attrs:
+        return default
+
+    if len(attrs) == 1:
+        return attrs[0]
+
+    return reduce(*attrs)
+
+
 class LogMixin:
     """Log helper."""
 
@@ -107,3 +158,50 @@ class LogMixin:
     def error(self, msg, *args):
         """Error level log."""
         return self.log(logging.ERROR, msg, *args)
+
+
+def retryable_req(
+    delays=(1, 5, 10, 15, 30, 60, 120, 180, 360, 600, 900, 1800), raise_=False
+):
+    """Make a method with ZCL requests retryable.
+
+    This adds delays keyword argument to function.
+    len(delays) is number of tries.
+    raise_ if the final attempt should raise the exception.
+    """
+
+    def decorator(func):
+        @functools.wraps(func)
+        async def wrapper(channel, *args, **kwargs):
+
+            exceptions = (zigpy.exceptions.ZigbeeException, asyncio.TimeoutError)
+            try_count, errors = 1, []
+            for delay in itertools.chain(delays, [None]):
+                try:
+                    return await func(channel, *args, **kwargs)
+                except exceptions as ex:
+                    errors.append(ex)
+                    if delay:
+                        delay = uniform(delay * 0.75, delay * 1.25)
+                        channel.debug(
+                            (
+                                "%s: retryable request #%d failed: %s. "
+                                "Retrying in %ss"
+                            ),
+                            func.__name__,
+                            try_count,
+                            ex,
+                            round(delay, 1),
+                        )
+                        try_count += 1
+                        await asyncio.sleep(delay)
+                    else:
+                        channel.warning(
+                            "%s: all attempts have failed: %s", func.__name__, errors
+                        )
+                        if raise_:
+                            raise
+
+        return wrapper
+
+    return decorator

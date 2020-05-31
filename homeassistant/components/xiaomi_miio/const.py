@@ -10,6 +10,7 @@ SERVICE_SET_CHILD_LOCK_ON = "fan_set_child_lock_on"
 SERVICE_SET_CHILD_LOCK_OFF = "fan_set_child_lock_off"
 SERVICE_SET_LED_BRIGHTNESS = "fan_set_led_brightness"
 SERVICE_SET_FAVORITE_LEVEL = "fan_set_favorite_level"
+SERVICE_SET_FAN_LEVEL = "fan_set_fan_level"
 SERVICE_SET_AUTO_DETECT_ON = "fan_set_auto_detect_on"
 SERVICE_SET_AUTO_DETECT_OFF = "fan_set_auto_detect_off"
 SERVICE_SET_LEARN_MODE_ON = "fan_set_learn_mode_on"
@@ -33,6 +34,8 @@ SERVICE_EYECARE_MODE_OFF = "light_eyecare_mode_off"
 
 # Remote Services
 SERVICE_LEARN = "remote_learn_command"
+SERVICE_SET_LED_ON = "remote_set_led_on"
+SERVICE_SET_LED_OFF = "remote_set_led_off"
 
 # Switch Services
 SERVICE_SET_WIFI_LED_ON = "switch_set_wifi_led_on"

@@ -55,6 +55,7 @@ HM_DEVICE_TYPES = {
         "IPKeySwitch",
         "IPKeySwitchLevel",
         "IPMultiIO",
+        "IPWSwitch",
     ],
     DISCOVER_LIGHTS: [
         "Dimmer",
@@ -63,6 +64,7 @@ HM_DEVICE_TYPES = {
         "IPDimmer",
         "ColorEffectLight",
         "IPKeySwitchLevel",
+        "ColdWarmDimmer",
     ],
     DISCOVER_SENSORS: [
         "SwitchPowermeter",
@@ -105,6 +107,8 @@ HM_DEVICE_TYPES = {
         "MotionIPV2",
         "IPMultiIO",
         "IPThermostatWall2",
+        "IPRemoteMotionV2",
+        "HBUNISenWEA",
     ],
     DISCOVER_CLIMATE: [
         "Thermostat",
@@ -144,6 +148,8 @@ HM_DEVICE_TYPES = {
         "TiltIP",
         "IPShutterContactSabotage",
         "IPContact",
+        "IPRemoteMotionV2",
+        "IPWInputDevice",
     ],
     DISCOVER_COVER: ["Blind", "KeyBlind", "IPKeyBlind", "IPKeyBlindTilt"],
     DISCOVER_LOCKS: ["KeyMatic"],

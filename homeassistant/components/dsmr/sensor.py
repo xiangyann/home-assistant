@@ -15,8 +15,8 @@ from homeassistant.const import (
     EVENT_HOMEASSISTANT_STOP,
     TIME_HOURS,
 )
-from homeassistant.core import CoreState
-import homeassistant.helpers.config_validation as cv
+from homeassistant.core import CoreState, callback
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.entity import Entity
 
 _LOGGER = logging.getLogger(__name__)
@@ -113,8 +113,7 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
         """Update entities with latest telegram and trigger state update."""
         # Make all device entities aware of new telegram
         for device in devices:
-            device.telegram = telegram
-            hass.async_create_task(device.async_update_ha_state())
+            device.update_data(telegram)
 
     # Creates an asyncio.Protocol factory for reading DSMR telegrams from
     # serial and calls update_entities_telegram to update entities on arrival
@@ -187,6 +186,13 @@ class DSMREntity(Entity):
         self._obis = obis
         self._config = config
         self.telegram = {}
+
+    @callback
+    def update_data(self, telegram):
+        """Update data."""
+        self.telegram = telegram
+        if self.hass:
+            self.async_write_ha_state()
 
     def get_dsmr_object_attr(self, attribute):
         """Read attribute from last received telegram for this DSMR object."""

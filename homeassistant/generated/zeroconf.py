@@ -6,11 +6,18 @@ To update, run python3 -m script.hassfest
 # fmt: off
 
 ZEROCONF = {
-    "_axis-video._tcp.local.": [
-        "axis"
+    "_api._udp.local.": [
+        "guardian"
     ],
-    "_coap._udp.local.": [
-        "tradfri"
+    "_axis-video._tcp.local.": [
+        "axis",
+        "doorbird"
+    ],
+    "_daap._tcp.local.": [
+        "forked_daapd"
+    ],
+    "_dkapi._tcp.local.": [
+        "daikin"
     ],
     "_elg._tcp.local.": [
         "elgato"
@@ -23,6 +30,15 @@ ZEROCONF = {
     ],
     "_hap._tcp.local.": [
         "homekit_controller"
+    ],
+    "_ipp._tcp.local.": [
+        "ipp"
+    ],
+    "_ipps._tcp.local.": [
+        "ipp"
+    ],
+    "_miio._udp.local.": [
+        "xiaomi_miio"
     ],
     "_printer._tcp.local.": [
         "brother"
@@ -39,12 +55,17 @@ ZEROCONF = {
 }
 
 HOMEKIT = {
+    "819LMB": "myq",
+    "AC02": "tado",
     "BSB002": "hue",
+    "Healty Home Coach": "netatmo",
     "LIFX": "lifx",
     "Netatmo Relay": "netatmo",
+    "PowerView": "hunterdouglas_powerview",
     "Presence": "netatmo",
     "Rachio": "rachio",
     "TRADFRI": "tradfri",
     "Welcome": "netatmo",
-    "Wemo": "wemo"
+    "Wemo": "wemo",
+    "tado": "tado"
 }

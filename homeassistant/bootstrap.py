@@ -14,15 +14,14 @@ import voluptuous as vol
 from homeassistant import config as conf_util, config_entries, core, loader
 from homeassistant.components import http
 from homeassistant.const import (
-    EVENT_HOMEASSISTANT_CLOSE,
     EVENT_HOMEASSISTANT_STOP,
     REQUIRED_NEXT_PYTHON_DATE,
     REQUIRED_NEXT_PYTHON_VER,
 )
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.typing import ConfigType
-from homeassistant.setup import DATA_SETUP, async_setup_component
-from homeassistant.util.logging import AsyncHandler
+from homeassistant.setup import DATA_SETUP, DATA_SETUP_STARTED, async_setup_component
+from homeassistant.util.logging import async_activate_log_queue_handler
 from homeassistant.util.package import async_get_user_site, is_virtual_env
 from homeassistant.util.yaml import clear_secret_cache
 
@@ -32,6 +31,8 @@ ERROR_LOG_FILENAME = "home-assistant.log"
 
 # hass.data key for logging information.
 DATA_LOGGING = "logging"
+
+LOG_SLOW_STARTUP_INTERVAL = 60
 
 DEBUGGER_INTEGRATIONS = {"ptvsd"}
 CORE_INTEGRATIONS = ("homeassistant", "persistent_notification")
@@ -215,6 +216,7 @@ def async_enable_logging(
 
     if not log_no_color:
         try:
+            # pylint: disable=import-outside-toplevel
             from colorlog import ColoredFormatter
 
             # basicConfig must be called after importing colorlog in order to
@@ -248,6 +250,10 @@ def async_enable_logging(
     logging.getLogger("urllib3").setLevel(logging.WARNING)
     logging.getLogger("aiohttp.access").setLevel(logging.WARNING)
 
+    sys.excepthook = lambda *args: logging.getLogger(None).exception(
+        "Uncaught exception", exc_info=args  # type: ignore
+    )
+
     # Log errors to a file if we have write access to file or config dir
     if log_file is None:
         err_log_path = hass.config.path(ERROR_LOG_FILENAME)
@@ -273,23 +279,16 @@ def async_enable_logging(
         err_handler.setLevel(logging.INFO if verbose else logging.WARNING)
         err_handler.setFormatter(logging.Formatter(fmt, datefmt=datefmt))
 
-        async_handler = AsyncHandler(hass.loop, err_handler)
-
-        async def async_stop_async_handler(_: Any) -> None:
-            """Cleanup async handler."""
-            logging.getLogger("").removeHandler(async_handler)  # type: ignore
-            await async_handler.async_close(blocking=True)
-
-        hass.bus.async_listen_once(EVENT_HOMEASSISTANT_CLOSE, async_stop_async_handler)
-
         logger = logging.getLogger("")
-        logger.addHandler(async_handler)  # type: ignore
+        logger.addHandler(err_handler)
         logger.setLevel(logging.INFO)
 
         # Save the log file location for access by other components.
         hass.data[DATA_LOGGING] = err_log_path
     else:
         _LOGGER.error("Unable to set up error log %s (access denied)", err_log_path)
+
+    async_activate_log_queue_handler(hass)
 
 
 async def async_mount_local_lib_path(config_dir: str) -> str:
@@ -308,7 +307,7 @@ async def async_mount_local_lib_path(config_dir: str) -> str:
 def _get_domains(hass: core.HomeAssistant, config: Dict[str, Any]) -> Set[str]:
     """Get domains of components to set up."""
     # Filter out the repeating and common config section [homeassistant]
-    domains = set(key.split(" ")[0] for key in config.keys() if key != core.DOMAIN)
+    domains = {key.split(" ")[0] for key in config.keys() if key != core.DOMAIN}
 
     # Add config entry domains
     if not hass.config.safe_mode:
@@ -325,15 +324,47 @@ async def _async_set_up_integrations(
     hass: core.HomeAssistant, config: Dict[str, Any]
 ) -> None:
     """Set up all the integrations."""
+
+    setup_started = hass.data[DATA_SETUP_STARTED] = {}
+
+    async def async_setup_multi_components(domains: Set[str]) -> None:
+        """Set up multiple domains. Log on failure."""
+
+        async def _async_log_pending_setups() -> None:
+            """Periodic log of setups that are pending for longer than LOG_SLOW_STARTUP_INTERVAL."""
+            while True:
+                await asyncio.sleep(LOG_SLOW_STARTUP_INTERVAL)
+                remaining = [domain for domain in domains if domain in setup_started]
+
+                if remaining:
+                    _LOGGER.info(
+                        "Waiting on integrations to complete setup: %s",
+                        ", ".join(remaining),
+                    )
+
+        futures = {
+            domain: hass.async_create_task(async_setup_component(hass, domain, config))
+            for domain in domains
+        }
+        log_task = asyncio.create_task(_async_log_pending_setups())
+        await asyncio.wait(futures.values())
+        log_task.cancel()
+        errors = [domain for domain in domains if futures[domain].exception()]
+        for domain in errors:
+            exception = futures[domain].exception()
+            _LOGGER.error(
+                "Error setting up integration %s - received exception",
+                domain,
+                exc_info=(type(exception), exception, exception.__traceback__),
+            )
+
     domains = _get_domains(hass, config)
 
     # Start up debuggers. Start these first in case they want to wait.
     debuggers = domains & DEBUGGER_INTEGRATIONS
     if debuggers:
         _LOGGER.debug("Starting up debuggers %s", debuggers)
-        await asyncio.gather(
-            *(async_setup_component(hass, domain, config) for domain in debuggers)
-        )
+        await async_setup_multi_components(debuggers)
         domains -= DEBUGGER_INTEGRATIONS
 
     # Resolve all dependencies of all components so we can find the logging
@@ -358,9 +389,7 @@ async def _async_set_up_integrations(
     if logging_domains:
         _LOGGER.info("Setting up %s", logging_domains)
 
-        await asyncio.gather(
-            *(async_setup_component(hass, domain, config) for domain in logging_domains)
-        )
+        await async_setup_multi_components(logging_domains)
 
     # Kick off loading the registries. They don't need to be awaited.
     asyncio.gather(
@@ -370,9 +399,7 @@ async def _async_set_up_integrations(
     )
 
     if stage_1_domains:
-        await asyncio.gather(
-            *(async_setup_component(hass, domain, config) for domain in stage_1_domains)
-        )
+        await async_setup_multi_components(stage_1_domains)
 
     # Load all integrations
     after_dependencies: Dict[str, Set[str]] = {}
@@ -401,9 +428,7 @@ async def _async_set_up_integrations(
 
         _LOGGER.debug("Setting up %s", domains_to_load)
 
-        await asyncio.gather(
-            *(async_setup_component(hass, domain, config) for domain in domains_to_load)
-        )
+        await async_setup_multi_components(domains_to_load)
 
         last_load = domains_to_load
         stage_2_domains -= domains_to_load
@@ -413,9 +438,8 @@ async def _async_set_up_integrations(
     if stage_2_domains:
         _LOGGER.debug("Final set up: %s", stage_2_domains)
 
-        await asyncio.gather(
-            *(async_setup_component(hass, domain, config) for domain in stage_2_domains)
-        )
+        await async_setup_multi_components(stage_2_domains)
 
     # Wrap up startup
+    _LOGGER.debug("Waiting for startup to wrap up")
     await hass.async_block_till_done()

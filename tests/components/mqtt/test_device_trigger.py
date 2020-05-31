@@ -4,7 +4,7 @@ import json
 import pytest
 
 import homeassistant.components.automation as automation
-from homeassistant.components.mqtt import DOMAIN
+from homeassistant.components.mqtt import DOMAIN, debug_info
 from homeassistant.components.mqtt.device_trigger import async_attach_trigger
 from homeassistant.components.mqtt.discovery import async_start
 from homeassistant.setup import async_setup_component
@@ -14,6 +14,7 @@ from tests.common import (
     assert_lists_same,
     async_fire_mqtt_message,
     async_get_device_automations,
+    async_mock_mqtt_component,
     async_mock_service,
     mock_device_registry,
     mock_registry,
@@ -134,6 +135,7 @@ async def test_get_non_existing_triggers(hass, device_reg, entity_reg, mqtt_mock
     assert_lists_same(triggers, [])
 
 
+@pytest.mark.no_fail_on_log_exception
 async def test_discover_bad_triggers(hass, device_reg, entity_reg, mqtt_mock):
     """Test bad discovery message."""
     config_entry = MockConfigEntry(domain=DOMAIN, data={})
@@ -455,7 +457,7 @@ async def test_if_fires_on_mqtt_message_after_update(
     await hass.async_block_till_done()
     assert len(calls) == 1
 
-    # Update the trigger
+    # Update the trigger with different topic
     async_fire_mqtt_message(hass, "homeassistant/device_automation/bla1/config", data2)
     await hass.async_block_till_done()
 
@@ -466,6 +468,65 @@ async def test_if_fires_on_mqtt_message_after_update(
     async_fire_mqtt_message(hass, "foobar/triggers/buttonOne", "")
     await hass.async_block_till_done()
     assert len(calls) == 2
+
+    # Update the trigger with same topic
+    async_fire_mqtt_message(hass, "homeassistant/device_automation/bla1/config", data2)
+    await hass.async_block_till_done()
+
+    async_fire_mqtt_message(hass, "foobar/triggers/button1", "")
+    await hass.async_block_till_done()
+    assert len(calls) == 2
+
+    async_fire_mqtt_message(hass, "foobar/triggers/buttonOne", "")
+    await hass.async_block_till_done()
+    assert len(calls) == 3
+
+
+async def test_no_resubscribe_same_topic(hass, device_reg, mqtt_mock):
+    """Test subscription to topics without change."""
+    mock_mqtt = await async_mock_mqtt_component(hass)
+    config_entry = MockConfigEntry(domain=DOMAIN, data={})
+    config_entry.add_to_hass(hass)
+    await async_start(hass, "homeassistant", {}, config_entry)
+
+    data1 = (
+        '{ "automation_type":"trigger",'
+        '  "device":{"identifiers":["0AFFD2"]},'
+        '  "topic": "foobar/triggers/button1",'
+        '  "type": "button_short_press",'
+        '  "subtype": "button_1" }'
+    )
+    async_fire_mqtt_message(hass, "homeassistant/device_automation/bla1/config", data1)
+    await hass.async_block_till_done()
+    device_entry = device_reg.async_get_device({("mqtt", "0AFFD2")}, set())
+
+    assert await async_setup_component(
+        hass,
+        automation.DOMAIN,
+        {
+            automation.DOMAIN: [
+                {
+                    "trigger": {
+                        "platform": "device",
+                        "domain": DOMAIN,
+                        "device_id": device_entry.id,
+                        "discovery_id": "bla1",
+                        "type": "button_short_press",
+                        "subtype": "button_1",
+                    },
+                    "action": {
+                        "service": "test.automation",
+                        "data_template": {"some": ("short_press")},
+                    },
+                },
+            ]
+        },
+    )
+
+    call_count = mock_mqtt.async_subscribe.call_count
+    async_fire_mqtt_message(hass, "homeassistant/device_automation/bla1/config", data1)
+    await hass.async_block_till_done()
+    assert mock_mqtt.async_subscribe.call_count == call_count
 
 
 async def test_not_fires_on_mqtt_message_after_remove_by_mqtt(
@@ -1104,3 +1165,44 @@ async def test_cleanup_device_with_entity2(hass, device_reg, entity_reg, mqtt_mo
     # Verify device registry entry is cleared
     device_entry = device_reg.async_get_device({("mqtt", "helloworld")}, set())
     assert device_entry is None
+
+
+async def test_trigger_debug_info(hass, mqtt_mock):
+    """Test debug_info.
+
+    This is a test helper for MQTT debug_info.
+    """
+    entry = MockConfigEntry(domain=DOMAIN)
+    entry.add_to_hass(hass)
+    await async_start(hass, "homeassistant", {}, entry)
+    registry = await hass.helpers.device_registry.async_get_registry()
+
+    config = {
+        "platform": "mqtt",
+        "automation_type": "trigger",
+        "topic": "test-topic",
+        "type": "foo",
+        "subtype": "bar",
+        "device": {
+            "connections": [["mac", "02:5b:26:a8:dc:12"]],
+            "manufacturer": "Whatever",
+            "name": "Beer",
+            "model": "Glass",
+            "sw_version": "0.1-beta",
+        },
+    }
+    data = json.dumps(config)
+    async_fire_mqtt_message(hass, "homeassistant/device_automation/bla/config", data)
+    await hass.async_block_till_done()
+
+    device = registry.async_get_device(set(), {("mac", "02:5b:26:a8:dc:12")})
+    assert device is not None
+
+    debug_info_data = await debug_info.info_for_device(hass, device.id)
+    assert len(debug_info_data["entities"]) == 0
+    assert len(debug_info_data["triggers"]) == 1
+    assert (
+        debug_info_data["triggers"][0]["discovery_data"]["topic"]
+        == "homeassistant/device_automation/bla/config"
+    )
+    assert debug_info_data["triggers"][0]["discovery_data"]["payload"] == config

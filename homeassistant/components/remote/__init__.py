@@ -24,7 +24,7 @@ from homeassistant.helpers.entity_component import EntityComponent
 from homeassistant.helpers.typing import ConfigType, HomeAssistantType
 from homeassistant.loader import bind_hass
 
-# mypy: allow-untyped-calls
+# mypy: allow-untyped-calls, allow-untyped-defs, no-check-untyped-defs
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -122,7 +122,7 @@ async def async_unload_entry(hass: HomeAssistantType, entry: ConfigEntry) -> boo
     return await cast(EntityComponent, hass.data[DOMAIN]).async_unload_entry(entry)
 
 
-class RemoteDevice(ToggleEntity):
+class RemoteEntity(ToggleEntity):
     """Representation of a remote."""
 
     @property
@@ -149,3 +149,15 @@ class RemoteDevice(ToggleEntity):
         """Learn a command from a device."""
         assert self.hass is not None
         await self.hass.async_add_executor_job(ft.partial(self.learn_command, **kwargs))
+
+
+class RemoteDevice(RemoteEntity):
+    """Representation of a remote (for backwards compatibility)."""
+
+    def __init_subclass__(cls, **kwargs):
+        """Print deprecation warning."""
+        super().__init_subclass__(**kwargs)
+        _LOGGER.warning(
+            "RemoteDevice is deprecated, modify %s to extend RemoteEntity",
+            cls.__name__,
+        )

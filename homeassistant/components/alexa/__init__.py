@@ -3,15 +3,13 @@ import logging
 
 import voluptuous as vol
 
-from homeassistant.const import CONF_NAME
+from homeassistant.const import CONF_CLIENT_ID, CONF_CLIENT_SECRET, CONF_NAME
 from homeassistant.core import callback
 from homeassistant.helpers import config_validation as cv, entityfilter
 
 from . import flash_briefings, intent, smart_home_http
 from .const import (
     CONF_AUDIO,
-    CONF_CLIENT_ID,
-    CONF_CLIENT_SECRET,
     CONF_DESCRIPTION,
     CONF_DISPLAY_CATEGORIES,
     CONF_DISPLAY_URL,
@@ -98,11 +96,7 @@ async def async_setup(hass, config):
                 f"send command {data['request']['namespace']}/{data['request']['name']}"
             )
 
-        return {
-            "name": "Amazon Alexa",
-            "message": message,
-            "entity_id": entity_id,
-        }
+        return {"name": "Amazon Alexa", "message": message, "entity_id": entity_id}
 
     hass.components.logbook.async_describe_event(
         DOMAIN, EVENT_ALEXA_SMART_HOME, async_describe_logbook_event
